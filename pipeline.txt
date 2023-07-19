@@ -1,0 +1,122 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[ ]:
+
+import warnings
+warnings.filterwarnings('ignore')
+import pandas as pd
+import numpy as np
+import swifter
+import json
+import spacy
+import subprocess
+from datetime import date, timedelta
+import pymongo
+import time
+import boto3
+from ast import literal_eval
+from botocore.exceptions import ClientError
+import pymongo
+from pymongo import MongoClient
+import json
+from bson import Binary, Code
+from bson.json_util import dumps
+from bson.objectid import ObjectId
+from datetime import datetime, timedelta
+import psutil
+import os
+import torch
+from tqdm.auto import tqdm
+import tensorflow as tf
+from transformers import BertTokenizer
+from torch.utils.data import TensorDataset
+from transformers import TFBertModel
+from transformers import BertForSequenceClassification
+from read_input import load_data,data_preprocess_whatsappdb
+import preprocess
+import dataframe
+#import dopredict
+#from predict import predict, predictsub
+import prepare_input
+from keybert import KeyBERT
+from sklearn import preprocessing
+
+tf.config.list_physical_devices('GPU')
+tf.debugging.set_log_device_placement(True)
+df_tag = pd.read_excel('/opt/agent_rex/Keyword_Extraction/basetags_input.xlsx')
+df_subtag = pd.read_excel('/opt/agent_rex/Keyword_Extraction/subtags_input.xlsx')
+
+le = preprocessing.LabelEncoder()
+
+
+
+df_tag = df_tag[df_tag['validated_tag'].notnull()]
+le.fit(df_tag['validated_tag'])
+df_tag['tag_label'] = le.transform(df_tag['validated_tag'])
+tags = le.inverse_transform(df_tag['tag_label'])
+uniqtag = set(tags)
+tag_class = sorted(list(uniqtag))
+
+
+
+df_subtag = df_subtag[df_subtag['validated_sub_tag'].notnull()]
+le.fit(df_subtag['validated_sub_tag'])
+df_subtag['subtag_label'] = le.transform(df_subtag['validated_sub_tag'])
+subtags = le.inverse_transform(df_subtag['subtag_label'])
+uniqsubtag = set(subtags)
+subtag_class = sorted(list(uniqsubtag))
+
+
+
+
+
+
+class_model = tf.keras.models.load_model('/opt/agent_rex/Keyword_Extraction/class_model_5')
+subclass_model = tf.keras.models.load_model('/opt/agent_rex/Keyword_Extraction/subclass_model2')
+tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
+
+
+
+def make_prediction(model, processed_data, classes=tag_class):
+    probs = model.predict(processed_data)[0]
+    return classes[np.argmax(probs)]
+ 
+
+def make_predictionsub(model, processed_data, classes=subtag_class):
+    probs = model.predict(processed_data)[0]
+    return classes[np.argmax(probs)]
+    
+    
+
+
+def predicttag(input_text):
+    processed_data = prepare_input.prepare_data(input_text, tokenizer)
+    resulttag = make_prediction(class_model, processed_data=processed_data)
+    return resulttag
+
+def predictsub(input_text):
+    processed_data = prepare_input.prepare_data(input_text, tokenizer)
+    resultsub = make_predictionsub(subclass_model, processed_data=processed_data)
+    return resultsub
+
+
+
+    
+
+
+#df  = load_data()
+#df_1 = data_preprocess_whatsappdb(df)
+#df = dataframe.createdataframe(df_1)
+df = pd.read_excel('filepath')
+df['tag'] = df['conversations_content'].apply(lambda x: predicttag(x))
+df['subtag'] = df['conversations_content'].apply(lambda x: predictsub(x))
+
+
+df.to_excel('output_tags_subtags.xlsx')
+print(df)
+
+
+
+
+
